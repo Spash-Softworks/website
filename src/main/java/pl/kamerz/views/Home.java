@@ -36,12 +36,12 @@ public class Home extends VerticalLayout {
 
         RouterLink galleryBtn = new RouterLink(Gallery.class);
         galleryBtn.addClassName("btn-icon");
-        galleryBtn.add(new Html("<i class=\"fa-solid fa-table-cells\"></i>"));
+        galleryBtn.add(new Html("<i class=\"fa-solid fa-grip\"></i>"));
         galleryBtn.getElement().setAttribute("title", "Gallery");
 
         Anchor docsBtn = new Anchor("/docs", "");
         docsBtn.addClassName("btn-icon");
-        docsBtn.add(new Html("<i class=\"fa-solid fa-book\"></i>"));
+        docsBtn.add(new Html("<i class=\"fa-solid fa-file-lines\"></i>"));
         docsBtn.getElement().setAttribute("title", "Documentation");
 
         Anchor discordBtn = new Anchor("https://dsc.gg/spashapi", "");

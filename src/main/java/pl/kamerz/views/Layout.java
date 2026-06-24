@@ -27,11 +27,14 @@ public class Layout extends AppLayout {
         RouterLink docs = new RouterLink("Docs", Docs.class);
         docs.addClassName("nav-link");
 
+        RouterLink format = new RouterLink("Format", Format.class);
+        format.addClassName("nav-link");
+
         Anchor discord = new Anchor("https://dsc.gg/spashapi", "Discord");
         discord.setTarget("_blank");
         discord.addClassName("nav-link");
 
-        HorizontalLayout links = new HorizontalLayout(offsets, gallery, docs, discord);
+        HorizontalLayout links = new HorizontalLayout(offsets, gallery, docs, format, discord);
         links.addClassName("nav-links");
 
         HorizontalLayout bar = new HorizontalLayout(home, links);

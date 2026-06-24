@@ -15,6 +15,7 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.radiobutton.RadioGroupVariant;
+import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.provider.ListDataProvider;
 import com.vaadin.flow.router.PageTitle;
@@ -27,6 +28,7 @@ import pl.kamerz.service.OffsetService.OffsetData;
 import pl.kamerz.service.OffsetService.Provider;
 import pl.kamerz.service.VersionService;
 import pl.kamerz.service.VersionService.Version;
+import pl.kamerz.utils.Formatter;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -245,7 +247,12 @@ public class Offsets extends VerticalLayout {
         download.add(dlBtn);
         download.addClassName("offset-download");
 
-        bar.add(copyAll, view, download);
+        Button export = new Button("Export", new Icon(VaadinIcon.DOWNLOAD));
+        export.addThemeVariants(ButtonVariant.LUMO_SMALL);
+        export.setEnabled(!rows.isEmpty());
+        export.addClickListener(e -> openExportDialog(cat, rows));
+
+        bar.add(copyAll, view, download, export);
         return bar;
     }
 
@@ -303,6 +310,76 @@ public class Offsets extends VerticalLayout {
         grid.setDataProvider(new ListDataProvider<>(rows));
         grid.addClassName("bounded-grid");
         return grid;
+    }
+
+    private void openExportDialog(Cat cat, List<Offset> rows) {
+        Dialog dialog = new Dialog();
+        dialog.addClassName("export-dialog");
+        dialog.setHeaderTitle("Export · " + cat.label());
+        dialog.setWidth("min(380px, 92vw)");
+
+        Select<Formatter> fmtSelect = new Select<>();
+        fmtSelect.setLabel("Format");
+        fmtSelect.setItems(Formatter.values());
+        fmtSelect.setValue(Formatter.C_HEADER);
+        fmtSelect.setWidthFull();
+
+        Anchor anchor = new Anchor("", "");
+        anchor.getElement().setAttribute("download", true);
+        Button dlBtn = new Button("Download", new Icon(VaadinIcon.DOWNLOAD));
+        dlBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SMALL);
+        anchor.add(dlBtn);
+
+        Button copyBtn = new Button("Copy", new Icon(VaadinIcon.COPY));
+        copyBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+        copyBtn.addClickListener(e -> {
+            Formatter fmt = fmtSelect.getValue();
+            if (fmt != null) copyToClipboard(
+                    fmt.format(rows, data.offsetVersion(), cat.label()),
+                    "Offsets copied as " + fmt.label);
+        });
+
+        Button viewBtn = new Button("View", new Icon(VaadinIcon.CODE));
+        viewBtn.addThemeVariants(ButtonVariant.LUMO_SMALL);
+        viewBtn.addClickListener(e -> {
+            Formatter fmt = fmtSelect.getValue();
+            if (fmt != null) openFormattedSourceDialog(
+                    cat, fmt, fmt.format(rows, data.offsetVersion(), cat.label()));
+        });
+
+        Runnable refreshHref = () -> {
+            Formatter fmt = fmtSelect.getValue();
+            if (fmt == null) return;
+            String content = fmt.format(rows, data.offsetVersion(), cat.label());
+            String filename = cat.file().replace(".hpp", "") + "-" + data.offsetVersion() + "." + fmt.extension;
+            anchor.setHref(new StreamResource(filename,
+                    () -> new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8))));
+        };
+
+        refreshHref.run();
+        fmtSelect.addValueChangeListener(e -> { if (e.getValue() != null) refreshHref.run(); });
+
+        dialog.add(fmtSelect);
+        Button close = new Button("Close", e -> dialog.close());
+        dialog.getFooter().add(viewBtn, copyBtn, anchor, close);
+        dialog.open();
+    }
+
+    private void openFormattedSourceDialog(Cat cat, Formatter fmt, String content) {
+        Dialog dialog = new Dialog();
+        dialog.addClassName("source-dialog");
+        dialog.setHeaderTitle(cat.label() + " · " + fmt.label + " · version-" + data.offsetVersion());
+        dialog.setWidth("min(900px, 92vw)");
+        dialog.setHeight("min(720px, 85vh)");
+        dialog.setResizable(true);
+
+        dialog.add(new Monaco(fmt.monacoLanguage, content));
+
+        Button copy = new Button("Copy", new Icon(VaadinIcon.COPY));
+        copy.addClickListener(e -> copyToClipboard(content, "Copied"));
+        Button close = new Button("Close", e -> dialog.close());
+        dialog.getFooter().add(copy, close);
+        dialog.open();
     }
 
     private void copyToClipboard(String text, String msg) {

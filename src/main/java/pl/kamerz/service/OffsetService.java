@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -127,7 +128,7 @@ public class OffsetService {
     public List<Cat> categories(Provider provider) {
         return switch (provider) {
             case SODA -> List.of(
-                    new Cat("External", "offsets.hpp"),
+                    new Cat("Classes", "offsets.hpp"),
                     new Cat("Internal", "int.hpp"),
                     new Cat("CFG", "CFG.hpp"),
                     new Cat("FFlags", "fflags.hpp"));
@@ -180,11 +181,12 @@ public class OffsetService {
         }
 
         String live = liveHash();
+        List<String> all = versions(provider);
         List<String> candidates = new ArrayList<>();
-        for (String v : versions(provider)) {
+        for (String v : all) {
             if (bareHash(v).equals(live)) candidates.add(v);
         }
-        for (String v : versions(provider)) {
+        for (String v : all) {
             if (!candidates.contains(v)) candidates.add(v);
         }
         if (provider == Provider.SODA && !live.isBlank()
@@ -210,18 +212,32 @@ public class OffsetService {
     }
 
     private OffsetData build(Provider provider, String version) {
+        String bare = bareHash(version);
+        List<Cat> cats = categories(provider);
+
+        // Fire all file fetches in parallel
+        List<CompletableFuture<String>> futures = cats.stream()
+                .map(cat -> http.sendAsync(buildRequest(provider, version, cat.file()),
+                                HttpResponse.BodyHandlers.ofString())
+                        .thenApply(resp -> resp.statusCode() == 200
+                                ? Header.clean(resp.body(), bare) : null)
+                        .exceptionally(ex -> null))
+                .toList();
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
         Map<String, List<Offset>> parsed = new LinkedHashMap<>();
         Map<String, String> raw = new LinkedHashMap<>();
-        String bare = bareHash(version);
         boolean any = false;
 
-        for (Cat cat : categories(provider)) {
-            try {
-                String src = Header.clean(fetch(provider, version, cat.file()), bare);
+        for (int i = 0; i < cats.size(); i++) {
+            Cat cat = cats.get(i);
+            String src = futures.get(i).join();
+            if (src != null) {
                 raw.put(cat.file(), src);
                 parsed.put(cat.file(), parseHpp(src));
                 any = true;
-            } catch (Exception e) {
+            } else {
                 raw.put(cat.file(), "");
                 parsed.put(cat.file(), List.of());
             }
@@ -231,19 +247,14 @@ public class OffsetService {
         return new OffsetData(parsed, raw, bare, bare.equals(liveHash()), true, null);
     }
 
-    private String fetch(Provider provider, String version, String file) throws Exception {
+    private HttpRequest buildRequest(Provider provider, String version, String file) {
         String pathVersion = provider == Provider.SODA ? bareHash(version) : version;
         String url = String.format(provider.urlTemplate, pathVersion, file);
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+        return HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofSeconds(12))
                 .header("User-Agent", UA)
                 .header("Accept", "text/plain, */*")
                 .GET().build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) {
-            throw new RuntimeException("HTTP " + resp.statusCode() + " fetching " + file);
-        }
-        return resp.body();
     }
 
     public String liveHash() {
@@ -258,7 +269,7 @@ public class OffsetService {
         return s.startsWith("version-") ? s.substring(8) : s;
     }
 
-    static List<Offset> parseHpp(String src) {
+    public static List<Offset> parseHpp(String src) {
         if (src == null || src.isBlank()) return List.of();
         var result = new ArrayList<Offset>();
 

@@ -9,27 +9,45 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.tabs.TabSheet;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
+import java.util.Map;
+
 @PageTitle("Documentation")
 @Route(value = "docs", layout = Layout.class)
-public class Docs extends VerticalLayout {
+public class Docs extends VerticalLayout implements BeforeEnterObserver {
+
+    private static final Map<String, Integer> TAB_INDEX = Map.of(
+            "velocity", 1,
+            "madium",   2,
+            "ronix",    3,
+            "xeno",     4,
+            "pluto",    5,
+            "solara",   6
+    );
+
+    private final TabSheet tabs = new TabSheet();
 
     public Docs() {
         addClassName("docs-view");
-        setPadding(true);
-        setSpacing(true);
+        setPadding(false);
+        setSpacing(false);
 
         H1 title = new H1("Documentation");
         title.addClassName("page-title");
         Paragraph subtitle = new Paragraph(
-                "Our reference guide for dotnet wpf and winforms integrations.");
+                ".NET WPF and WinForms API reference for SpashAPI integrations.");
         subtitle.addClassName("page-subtitle");
 
-        TabSheet tabs = new TabSheet();
+        Div header = new Div(title, subtitle);
+        header.addClassName("docs-header");
+
         tabs.addClassName("docs-tabs");
         tabs.setWidthFull();
+        tabs.add("Offsets API", buildApiDocs());
         tabs.add("Velocity", md(VELOCITY));
         tabs.add("Madium", md(MADIUM));
         tabs.add("Ronix", md(RONIX));
@@ -49,57 +67,29 @@ public class Docs extends VerticalLayout {
         body.setWidthFull();
         body.setAlignItems(FlexComponent.Alignment.START);
 
-        tabs.addSelectedChangeListener(ev ->
-                getElement().executeJs("if (window.__buildToc) window.__buildToc()"));
+        tabs.addSelectedChangeListener(ev -> getElement().executeJs(
+                "window.__docsUpdate && window.__docsUpdate();"));
 
-        add(title, subtitle, body);
+        add(header, body);
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        event.getLocation().getQueryParameters()
+                .getParameters()
+                .getOrDefault("tab", java.util.List.of())
+                .stream().findFirst()
+                .map(String::toLowerCase)
+                .map(TAB_INDEX::get)
+                .ifPresent(tabs::setSelectedIndex);
     }
 
     @Override
     protected void onAttach(AttachEvent e) {
         super.onAttach(e);
+        e.getUI().getPage().addJavaScript("docs.js");
         getElement().executeJs(
-                "window.__buildToc = () => setTimeout(() => {" +
-                        "  const toc = document.getElementById('docs-toc');" +
-                        "  if (!toc) return;" +
-                        "  const all = Array.from(document.querySelectorAll('.docs-md'));" +
-                        "  const active = all.find(el => getComputedStyle(el).display !== 'none') || all[0];" +
-                        "  if (!active) { toc.innerHTML = ''; return; }" +
-                        "  const hs = Array.from(active.querySelectorAll('h2, h3'));" +
-                        "  if (!hs.length) { toc.innerHTML = ''; return; }" +
-                        "  let html = '<p class=\"toc-heading\">On this page</p><ul class=\"toc-list\">';" +
-                        "  hs.forEach((h, i) => {" +
-                        "    const id = 'sec-' + i;" +
-                        "    h.id = id;" +
-                        "    const cls = h.tagName === 'H3' ? ' toc-h3' : '';" +
-                        "    html += `<li class=\"toc-item${cls}\"><a href=\"#${id}\"` +" +
-                        "      ` onclick=\"event.preventDefault();document.getElementById('${id}')` +" +
-                        "      `.scrollIntoView({behavior:'smooth'});return false;\">${h.textContent}</a></li>`;" +
-                        "  });" +
-                        "  toc.innerHTML = html + '</ul>';" +
-                        "}, 120);" +
-                        "const hl = () => {" +
-                        "  document.querySelectorAll('.docs-md pre code:not(.hljs)').forEach(el => {" +
-                        "    if (window.hljs) hljs.highlightElement(el);" +
-                        "  });" +
-                        "};" +
-                        "const boot = () => {" +
-                        "  const cs = document.createElement('script');" +
-                        "  cs.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/csharp.min.js';" +
-                        "  cs.onload = () => { hl(); window.__buildToc(); };" +
-                        "  document.head.appendChild(cs);" +
-                        "  const obs = new MutationObserver(hl);" +
-                        "  obs.observe(document.body, { childList: true, subtree: true });" +
-                        "  setTimeout(() => obs.disconnect(), 10000);" +
-                        "};" +
-                        "if (window.hljs) { boot(); }" +
-                        "else {" +
-                        "  const s = document.createElement('script');" +
-                        "  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js';" +
-                        "  s.onload = boot; document.head.appendChild(s);" +
-                        "}" +
-                        "window.__buildToc();"
-        );
+                "if (window.__docsInit) window.__docsInit(); else window.__docsInitPending = true;");
     }
 
     private static Markdown md(String content) {
@@ -111,6 +101,126 @@ public class Docs extends VerticalLayout {
     private static Markdown soon(String name) {
         return md("## SpashAPI" + name +
                 "\n\nSorry, this is still in development, Thanks for understanding tho :3");
+    }
+
+    private static Div buildApiDocs() {
+        Div root = new Div();
+        root.addClassNames("api-docs", "docs-md");
+        root.getElement().setProperty("innerHTML", """
+            <h2>Offsets REST API</h2>
+            <p style="margin-bottom:24px">Fetch Roblox offsets over HTTP. No auth required, cached server-side. Base URL: <code>/api</code></p>
+
+            <div class="api-ep">
+              <div class="ep-hdr">
+                <span class="ep-badge ep-get">GET</span>
+                <span class="ep-path">/api/offsets/versions</span>
+              </div>
+              <p class="ep-desc">Returns available version hashes for a provider.</p>
+              <div class="ep-label">Parameters</div>
+              <table>
+                <thead><tr><th>Name</th><th>Default</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td>provider</td><td>soda</td><td>soda or theo</td></tr>
+                </tbody>
+              </table>
+              <div class="ep-label"><span class="ep-status">200</span> Response</div>
+              <pre><code class="language-json">["ad5d3e2906444472", "a182ba0d4c6f483b", "460909c4fe904aae"]</code></pre>
+            </div>
+
+            <div class="api-ep">
+              <div class="ep-hdr">
+                <span class="ep-badge ep-get">GET</span>
+                <span class="ep-path">/api/offsets/categories</span>
+              </div>
+              <p class="ep-desc">Returns the available categories for a provider. Use the label values as the category param on the main endpoint.</p>
+              <div class="ep-label">Parameters</div>
+              <table>
+                <thead><tr><th>Name</th><th>Default</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td>provider</td><td>soda</td><td>soda or theo</td></tr>
+                </tbody>
+              </table>
+              <div class="ep-label"><span class="ep-status">200</span> Soda</div>
+              <pre><code class="language-json">[
+  { "label": "Classes",  "file": "offsets.hpp" },
+  { "label": "Internal", "file": "int.hpp"     },
+  { "label": "CFG",      "file": "CFG.hpp"     },
+  { "label": "FFlags",   "file": "fflags.hpp"  }
+]</code></pre>
+              <div class="ep-label"><span class="ep-status">200</span> Theo</div>
+              <pre><code class="language-json">[
+  { "label": "External", "file": "offsets.hpp" },
+  { "label": "Structs",  "file": "struct.hpp"  },
+  { "label": "FFlags",   "file": "fflags.hpp"  }
+]</code></pre>
+            </div>
+
+            <div class="api-ep">
+              <div class="ep-hdr">
+                <span class="ep-badge ep-get">GET</span>
+                <span class="ep-path">/api/offsets</span>
+              </div>
+              <p class="ep-desc">Main endpoint. Returns JSON by default, or formatted source code when format is set.</p>
+              <div class="ep-label">Parameters</div>
+              <table>
+                <thead><tr><th>Name</th><th>Default</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td>provider</td><td>soda</td><td>soda or theo</td></tr>
+                  <tr><td>version</td><td>latest</td><td>version hash</td></tr>
+                  <tr><td>category</td><td>all</td><td>category label or filename, omit for all</td></tr>
+                  <tr><td>format</td><td></td><td>file extension for source output: cs, py, rs, hpp, go, lua, js, ts, kt, swift, asm... omit for JSON</td></tr>
+                </tbody>
+              </table>
+              <div class="ep-label"><span class="ep-status">200</span> All categories</div>
+              <pre><code class="language-json">{
+  "version": "ad5d3e2906444472",
+  "current": true,
+  "categories": {
+    "Classes":  [{ "namespace": "Player", "name": "Health", "value": "0x168" }],
+    "Internal": [],
+    "CFG":      [],
+    "FFlags":   []
+  }
+}</code></pre>
+              <div class="ep-label"><span class="ep-status">200</span> category=Classes</div>
+              <pre><code class="language-json">[
+  { "namespace": "Player",     "name": "Health", "value": "0x168" },
+  { "namespace": "RenderView", "name": "Fov",    "value": "0x2B4" }
+]</code></pre>
+              <div class="ep-label"><span class="ep-status">200</span> category=Classes &amp; format=cs</div>
+              <pre><code class="language-csharp">/*             ╱|、
+ *            (˚ˎ 。 7     kamerz is gay (version-ad5d3e2906444472)
+ *             |、˜ふ      time 04:20, 19 Jun 2026, *meow*!
+ *             じしˍ, )ノ   dsc.gg/spashapi
+ */
+
+public static class Offsets
+{
+    public static class Player
+    {
+        public const ulong Health = 0x168;
+    }
+}</code></pre>
+            </div>
+
+            <div class="api-ep">
+              <div class="ep-hdr">
+                <span class="ep-badge ep-get">GET</span>
+                <span class="ep-path">/api/offsets/raw</span>
+              </div>
+              <p class="ep-desc">Returns the original .hpp dump as plain text. category is required.</p>
+              <div class="ep-label">Parameters</div>
+              <table>
+                <thead><tr><th>Name</th><th>Default</th><th>Description</th></tr></thead>
+                <tbody>
+                  <tr><td>provider</td><td>soda</td><td>soda or theo</td></tr>
+                  <tr><td>version</td><td>latest</td><td>version hash</td></tr>
+                  <tr><td>category</td><td></td><td>required, accepts label or filename</td></tr>
+                </tbody>
+              </table>
+            </div>
+            """);
+        return root;
     }
 
     private static final String VELOCITY = """
